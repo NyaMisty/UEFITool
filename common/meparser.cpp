@@ -130,8 +130,8 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
         return U_INVALID_ME_PARTITION_TABLE;
     }
 
-    UINT32 fptNumEntries;
-    UINT32 chksumCalculated;
+    UINT32 fptNumEntries = 0;
+    UINT32 checksumCalculated = 0;
     bool msgInvalidPtHeaderChecksum = false;
 
     // Verify checksum
@@ -145,8 +145,8 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
             {
                 UByteArray tempHeader = region.left(pt1Header->HeaderLength);
                 tempHeader[romBypassVectorSize + 0x0B] = 0x00;
-                chksumCalculated = calculateChecksum8((const UINT8*)tempHeader.constData(), tempHeader.size());
-                msgInvalidPtHeaderChecksum = (chksumCalculated != pt1Header->Checksum);
+                checksumCalculated = calculateChecksum8((const UINT8*)tempHeader.constData(), tempHeader.size());
+                msgInvalidPtHeaderChecksum = (checksumCalculated != pt1Header->Checksum);
                 fptNumEntries = pt1Header->NumEntries;
             }
             break;
@@ -158,8 +158,9 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
                 tempPart[romBypassVectorSize + 0x15] = 0x00;
                 tempPart[romBypassVectorSize + 0x16] = 0x00;
                 tempPart[romBypassVectorSize + 0x17] = 0x00;
-                chksumCalculated = crc32(0, (const UINT8*)tempPart.constData(), tempPart.size());
-                msgInvalidPtHeaderChecksum = (chksumCalculated != pt2Header->Checksum);
+                checksumCalculated = crc32(0, (const UINT8*)tempPart.constData(), tempPart.size());
+                msgInvalidPtHeaderChecksum = (checksumCalculated != pt2Header->Checksum);
+                fptNumEntries = pt2Header->NumEntries;
             }
             break;
     }
@@ -185,7 +186,7 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
                        pt1Header->HeaderVersion, pt1Header->EntryVersion, pt1Header->HeaderLength,
                        pt1Header->TicksToAdd, pt1Header->TokensToAdd, pt1Header->UmaSize, pt1Header->FlashLayout,
                        pt1Header->FitcMajor, pt1Header->FitcMinor, pt1Header->FitcHotfix, pt1Header->FitcBuild, pt1Header->Checksum);
-            info += (msgInvalidPtHeaderChecksum ? usprintf("invalid, should be %02Xh", chksumCalculated) : UString("valid"));
+            info += (msgInvalidPtHeaderChecksum ? usprintf("invalid, should be %02Xh", checksumCalculated) : UString("valid"));
             break;
         case 0x21:
             info = usprintf("Full size: %Xh (%u)\nHeader size: %Xh (%u)\nBody size: %Xh (%u)\nNumber of entries: %u\n"
@@ -196,7 +197,7 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
                         pt2Header->HeaderVersion, pt2Header->EntryVersion, pt2Header->HeaderLength,
                         pt2Header->Flags, pt2Header->TicksToAdd, pt2Header->TokensToAdd, pt2Header->SPSFlags,
                         pt2Header->FitcMajor, pt2Header->FitcMinor, pt2Header->FitcHotfix, pt2Header->FitcBuild, pt2Header->Checksum);
-            info += (msgInvalidPtHeaderChecksum ? usprintf("invalid, should be %08Xh", chksumCalculated) : UString("valid"));
+            info += (msgInvalidPtHeaderChecksum ? usprintf("invalid, should be %08Xh", checksumCalculated) : UString("valid"));
             break;
     }
 
