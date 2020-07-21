@@ -132,10 +132,13 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
 
     UINT32 fptNumEntries;
     UINT32 chksumCalculated;
-    bool msgInvalidPtHeaderChecksum;
+    bool msgInvalidPtHeaderChecksum = false;
 
     // Verify checksum
     switch (pt1Header->HeaderVersion) {
+        default:
+            msg(usprintf("%s: FPT header with unknown version %02h", __FUNCTION__, pt1Header->HeaderVersion), parent);
+            /* FALLTHROUGH */
         case 0x10:
             /* FALLTHROUGH */
         case 0x20:
@@ -144,8 +147,8 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
                 tempHeader[romBypassVectorSize + 0x0B] = 0x00;
                 chksumCalculated = calculateChecksum8((const UINT8*)tempHeader.constData(), tempHeader.size());
                 msgInvalidPtHeaderChecksum = (chksumCalculated != pt1Header->Checksum);
+                fptNumEntries = pt1Header->NumEntries;
             }
-            fptNumEntries = pt1Header->NumEntries;
             break;
         case 0x21:
             {
@@ -156,17 +159,9 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
                 tempPart[romBypassVectorSize + 0x16] = 0x00;
                 tempPart[romBypassVectorSize + 0x17] = 0x00;
                 chksumCalculated = crc32(0, (const UINT8*)tempPart.constData(), tempPart.size());
-
                 msgInvalidPtHeaderChecksum = (chksumCalculated != pt2Header->Checksum);
             }
-        default:
-            msg(usprintf("%s: FPT header with unknown version %02h", __FUNCTION__, pt1Header->HeaderVersion), parent);
-            return U_INVALID_ME_PARTITION_TABLE;
-    }
-
-    // XXX: Shall we continue with parsing?
-    if (msgInvalidPtHeaderChecksum) {
-        msg(usprintf("%s: FPT header checksum is invalid", __FUNCTION__), index);
+            break;
     }
 
     // Get info
@@ -177,6 +172,8 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
     UString info;
 
     switch (pt1Header->HeaderVersion) {
+        default:
+            /* FALLTHROUGH */
         case 0x10:
             /* FALLTHROUGH */
         case 0x20:
@@ -191,8 +188,7 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
             info += (msgInvalidPtHeaderChecksum ? usprintf("invalid, should be %02Xh", chksumCalculated) : UString("valid"));
             break;
         case 0x21:
-            {
-                info = usprintf("Full size: %Xh (%u)\nHeader size: %Xh (%u)\nBody size: %Xh (%u)\nNumber of entries: %u\n"
+            info = usprintf("Full size: %Xh (%u)\nHeader size: %Xh (%u)\nBody size: %Xh (%u)\nNumber of entries: %u\n"
                                 "Header version: %02Xh\nEntry version: %02Xh\nHeader length: %02Xh\n"
                                 "Flags: %02Xh\nTicks to add: %04Xh\nTokens to add: %04Xh\nSPS Flags: %Xh\n"
                                 "FITC version: %u.%u.%u.%u\nChecksum: %08Xh, ",
@@ -200,17 +196,18 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
                         pt2Header->HeaderVersion, pt2Header->EntryVersion, pt2Header->HeaderLength,
                         pt2Header->Flags, pt2Header->TicksToAdd, pt2Header->TokensToAdd, pt2Header->SPSFlags,
                         pt2Header->FitcMajor, pt2Header->FitcMinor, pt2Header->FitcHotfix, pt2Header->FitcBuild, pt2Header->Checksum);
-                info += (msgInvalidPtHeaderChecksum ? usprintf("invalid, should be %08Xh", chksumCalculated) : UString("valid"));
-            }
-            break;
-        default:
-            info = usprintf("%s: XXX: unknown fpt header version - not yet!", __FUNCTION__);
+            info += (msgInvalidPtHeaderChecksum ? usprintf("invalid, should be %08Xh", chksumCalculated) : UString("valid"));
             break;
     }
 
     // Add tree item
     index = model->addItem(0, Types::FptStore, 0, name, UString(), info, header, body, UByteArray(), Fixed, parent);
 
+    // Show messages
+    if (msgInvalidPtHeaderChecksum) {
+        msg(usprintf("%s: FPT header checksum is invalid", __FUNCTION__), index);
+    }
+    
     // Add partition table entries
     std::vector<FPT_PARTITION_INFO> partitions;
     UINT32 offset = header.size();
@@ -219,11 +216,12 @@ USTATUS MeParser::parseFptRegion(const UByteArray & region, const UModelIndex & 
         // Populate entry header
         const FPT_HEADER_ENTRY* ptEntry = firstPtEntry + i;
 
-        // ME8!!!
+        // Special case of for ME8
         if (ptEntry->Name[0] == '\xE0' && ptEntry->Name[1] == '\x15')
             name = UString("E0150020");
         else
             name = usprintf("%c%c%c%c", ptEntry->Name[0], ptEntry->Name[1], ptEntry->Name[2], ptEntry->Name[3]);
+        
         // Get info
         info = usprintf("Full size: %Xh (%u)\nPartition offset: %Xh\nPartition length: %Xh\nPartition type: %02Xh",
                         sizeof(FPT_HEADER_ENTRY), sizeof(FPT_HEADER_ENTRY),
