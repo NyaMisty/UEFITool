@@ -906,21 +906,10 @@ USTATUS FfsParser::parseRawArea(const UModelIndex & index)
 
         // Check that item is fully present in input
         if (itemSize > (UINT32)data.size() || itemOffset + itemSize > (UINT32)data.size()) {
-            // Mark the rest as padding and finish parsing
-            UByteArray padding = data.mid(itemOffset);
-
-            // Get info
-            name = UString("Padding");
-            info = usprintf("Full size: %Xh (%u)", padding.size(), padding.size());
-
-            // Add tree item
-            UModelIndex paddingIndex = model->addItem(headerSize + itemOffset, Types::Padding, getPaddingType(padding), name, UString(), info, UByteArray(), padding, UByteArray(), Fixed, index);
-            msg(usprintf("%s: one of volumes inside overlaps the end of data", __FUNCTION__), paddingIndex);
-
-            // Update variables
-            prevItemOffset = itemOffset;
-            prevItemSize = padding.size();
-            break;
+            UINT32 newItemSize = data.size() - itemOffset;
+            msg(usprintf("%s: one of volumes inside overlaps the end of data, truncating from 0x%x to 0x%x", __FUNCTION__, itemSize, newItemSize), index);
+            itemSize = newItemSize;
+            itemAltSize = newItemSize;
         }
 
         // Parse current volume's header
